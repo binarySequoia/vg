@@ -25,7 +25,9 @@ void help_recalibrate(char** argv) {
          << "options:" << endl
          << "    -T, --train              read the input GAM file, and use the mapped_correctly flags from vg gamcompare to train a model" << endl
          << "    -m, --model FILE         load/save the model to/from the given file" << endl
-         << "    -t, --threads N          number of threads to use" << endl;
+         << "    -t, --threads N          number of threads to use" << endl
+         << "    -b  --bow                bag of words as a features" << endl
+         << "    -e  --mems               add mems as a features" << endl;
 }
 
 map<string, int> sequence_to_bag_of_words(string seq, int kmer){
@@ -55,7 +57,7 @@ string bag_of_word_to_string(map<string, int> bw){
 /// Turn an Alignment into a Vowpal Wabbit format example line.
 /// If train is true, give it a label so that VW will train on it.
 /// If train is false, do not label the data.
-string alignment_to_example_string(const Alignment& aln, bool train) {
+string alignment_to_example_string(const Alignment& aln, bool train, bool bow, bool mems) {
     // We will dump it to a string stream
     stringstream s;
     
@@ -86,8 +88,19 @@ string alignment_to_example_string(const Alignment& aln, bool train) {
     // Also do the identity
     s << "identity:" << aln.identity() << " ";
     
+    
+    // Bag of words as features
+    if(bow){
+        cerr << "Bag of words!" << endl;
+        s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 10));
+    }
+
+    if(mems){
+        cerr << "Mems" << endl;
+    }
+
     // TODO: more features
-    s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 10));
+
     return s.str();
 }
 
@@ -101,7 +114,8 @@ int main_recalibrate(int argc, char** argv) {
     int threads = 1;
     bool train = false;
     string model_filename;
-
+    bool bow = false;
+    bool mems = false;
     int c;
     optind = 2;
     while (true) {
@@ -109,13 +123,14 @@ int main_recalibrate(int argc, char** argv) {
         {
             {"help", no_argument, 0, 'h'},
             {"train", no_argument, 0, 'T'},
+            {"bow", no_argument, 0, 'b'},
             {"model", required_argument, 0, 'm'},
             {"threads", required_argument, 0, 't'},
             {0, 0, 0, 0}
         };
 
         int option_index = 0;
-        c = getopt_long (argc, argv, "hTm:t:",
+        c = getopt_long (argc, argv, "bhTm:t:",
                          long_options, &option_index);
 
         // Detect the end of the options.
@@ -135,6 +150,9 @@ int main_recalibrate(int argc, char** argv) {
         case 't':
             threads = atoi(optarg);
             omp_set_num_threads(threads);
+            break;
+        case 'b':
+            bow = true;
             break;
 
         case 'h':
@@ -187,7 +205,7 @@ int main_recalibrate(int argc, char** argv) {
             function<void(Alignment&)> train_on = [&](Alignment& aln) {
                 
                 // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, true);
+                string example_string = alignment_to_example_string(aln, true, bow, mems);
                 
                 // Load an example for each Alignment.
                 // You can apparently only have so many examples at a time because they live in a ring buffer of unspecified size.
@@ -234,7 +252,7 @@ int main_recalibrate(int argc, char** argv) {
             function<void(Alignment&)> recalibrate = [&](Alignment& aln) {
                 
                 // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, false);
+                string example_string = alignment_to_example_string(aln, false, bow, mems);
                 
                 // Load an example for each Alignment.
                 example* example = VW::read_example(*model, example_string);
