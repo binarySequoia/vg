@@ -2,6 +2,7 @@
 #include "mapper.hpp"
 #include "haplotypes.hpp"
 #include "algorithms/extract_containing_graph.hpp"
+#include "annotation.hpp"
 
 //#define debug_mapper
 
@@ -2354,6 +2355,9 @@ pair<vector<Alignment>, vector<Alignment>> Mapper::align_paired_multi(
     if (debug) cerr << "mems for read 1 " << mems_to_json(mems1) << endl;
     if (debug) cerr << "mems for read 2 " << mems_to_json(mems2) << endl;
 
+    set_annotation(&read1, "mems", mems_to_json(mems1));
+    set_annotation(&read2, "mems", mems_to_json(mems2));
+
     auto transition_weight = [&](const MaximalExactMatch& m1, const MaximalExactMatch& m2) {
 
 #ifdef debug_mapper
@@ -4230,6 +4234,10 @@ vector<Alignment> Mapper::align_multi_internal(bool compute_unpaired_quality,
                                                         false, true, true, false);
         // query mem hits
         alignments = align_mem_multi(aln, mems, cluster_mq, longest_lcp, fraction_filtered, max_mem_length, keep_multimaps, additional_multimaps_for_quality);
+
+        for(auto& a : alignments){
+            set_annotation(&a, "mems", mems_to_json(mems));
+        }
     }
 
 #ifdef debug_mapper
