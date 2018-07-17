@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <string.h>
 
 #include <string>
 #include <sstream>
@@ -11,8 +12,10 @@
 
 #include "../alignment.hpp"
 #include "../vg.hpp"
+#include "../annotation.hpp"
 
 #include <vowpalwabbit/vw.h>
+#include <jansson.h>
 
 using namespace std;
 using namespace vg;
@@ -46,12 +49,54 @@ map<string, int> sequence_to_bag_of_words(string seq, int kmer){
     return bw;
 }
 
+map<string, int> add_sequence_to_bw(map<string, int> bw, string seq, int kmer){
+    map<string, int>::iterator it;
+    int val;
+    for(int i = 0; i < seq.length() - kmer; i++){
+        string current_seq = seq.substr(i, kmer);
+        it = bw.find(current_seq);
+        if(it == bw.end()){
+            bw[current_seq] = 1;
+        }else{
+            bw[current_seq] += 1;
+        }
+    }
+    return bw;
+}
+
 string bag_of_word_to_string(map<string, int> bw){
     stringstream s;
     for(map<string,int>::iterator i = bw.begin(); i != bw.end(); i++){
         s << i->first << ":" << i->second << " ";
     }
     return s.str();
+}
+
+
+vector<string> parseMems(const char* json){
+
+    vector<string> s;
+    string buf = "";
+
+    json_t *json_content;
+    json_error_t error;
+
+    json_content = json_loads(json, 0, &error);
+
+
+    for(int i = 0; i < json_array_size(json_content); i++)
+    {
+        json_t *nested_array;
+        string message_text;
+
+        nested_array = json_array_get(json_content, i);
+        
+        message_text = json_string_value(json_array_get(nested_array, 0));
+
+        s.push_back(message_text);
+    }
+    return s;
+
 }
 
 /// Turn an Alignment into a Vowpal Wabbit format example line.
@@ -90,16 +135,22 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
     
     
     // Bag of words as features
-    if(bow){
-        cerr << "Bag of words!" << endl;
-        s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 10));
-    }
-
-    if(mems){
+    if(mems && bow){
         cerr << "Mems" << endl;
+        vector<string> mems_list = parseMems(get_annotation<string>(aln, "mems").c_str());
+
+        map<string, int> bw = sequence_to_bag_of_words(aln.sequence(), 4);
+
+        for(auto v : mems_list){
+            bw = add_sequence_to_bw(bw, v, 4);
+        }
+
+        s << bag_of_word_to_string(bw);
+    }else if(bow){
+        cerr << "Bag of words!" << endl;
+        s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 4));
     }
 
-    // TODO: more features
 
     return s.str();
 }
@@ -130,7 +181,7 @@ int main_recalibrate(int argc, char** argv) {
         };
 
         int option_index = 0;
-        c = getopt_long (argc, argv, "bhTm:t:",
+        c = getopt_long (argc, argv, "ebhTm:t:",
                          long_options, &option_index);
 
         // Detect the end of the options.
@@ -154,7 +205,9 @@ int main_recalibrate(int argc, char** argv) {
         case 'b':
             bow = true;
             break;
-
+        case 'e':
+            mems = true;
+            break;
         case 'h':
         case '?':
             help_recalibrate(argv);
