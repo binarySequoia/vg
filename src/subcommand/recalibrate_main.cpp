@@ -29,8 +29,9 @@ void help_recalibrate(char** argv) {
          << "    -T, --train              read the input GAM file, and use the mapped_correctly flags from vg gamcompare to train a model" << endl
          << "    -m, --model FILE         load/save the model to/from the given file" << endl
          << "    -t, --threads N          number of threads to use" << endl
-         << "    -b  --bow                bag of words as a features" << endl
-         << "    -e  --mems               add mems as a features" << endl;
+         << "    -b  --bow                bag of words as features" << endl
+         << "    -e  --mems               add mems as features" << endl
+         << "    -s  --memstats            add mems stats as features" << endl;
 }
 
 map<string, int> sequence_to_bag_of_words(string seq, int kmer){
@@ -184,13 +185,15 @@ int main_recalibrate(int argc, char** argv) {
             {"help", no_argument, 0, 'h'},
             {"train", no_argument, 0, 'T'},
             {"bow", no_argument, 0, 'b'},
+            {"mems", no_argument, 0, 'e'},
+            {"memstats", no_argument, 0, 's'},
             {"model", required_argument, 0, 'm'},
             {"threads", required_argument, 0, 't'},
             {0, 0, 0, 0}
         };
 
         int option_index = 0;
-        c = getopt_long (argc, argv, "ebhTm:t:",
+        c = getopt_long (argc, argv, "sebhTm:t:",
                          long_options, &option_index);
 
         // Detect the end of the options.
