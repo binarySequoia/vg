@@ -27,6 +27,9 @@ is $? 0 "vg recalibrate mems model training complete successfully"
 vg gamcompare -r 100 mapped.gam sim.gam | vg recalibrate -e --model recal.modele --train -
 is $? 0 "vg recalibrate bag of words and mems model training complete successfully"
 
+vg gamcompare -r 100 mapped.gam sim.gam | vg recalibrate -s --model recal.models --train -
+is $? 0 "vg recalibrate mems stats model training complete successfully"
+
 vg recalibrate --model recal.model mapped.gam > /dev/null
 is $? 0 "vg recalibrate mapping quality model prediction complete successfully"
 
@@ -37,7 +40,10 @@ vg recalibrate -e --model recal.modele mapped.gam  > /dev/null
 is $? 0 "vg recalibrate mems model prediction complete successfully"
 
 vg recalibrate -b -e --model recal.modelbe mapped.gam  > /dev/null
-is $? 0 "vg recalibrate bag of words and memes model prediction complete successfully"
+is $? 0 "vg recalibrate bag of words and mems model prediction complete successfully"
+
+vg recalibrate -s --model recal.modelbe mapped.gam  > /dev/null
+is $? 0 "vg recalibrate mems stats model prediction complete successfully"
 
 
 rm -f recal.model* *.gam x.*
