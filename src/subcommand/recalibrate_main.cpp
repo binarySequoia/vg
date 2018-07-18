@@ -100,20 +100,40 @@ vector<string> parseMems(const char* json){
 
 }
 
-string parseMemStats(const char* json){
+int get_x_counts(string seq, char a){
+    int c = 0;
+    for(int i = 0; i < seq.length(); i++ ){
+        if(seq[i] == a ){
+            c++;
+        }
+    }
+    return c;
+}
+
+string parseMemStats(const char* json, string read_sequence){
 
     stringstream s;
-    int maxMems = 0;
-    int minMems = 0xffffffff;
-    int maxPositionsCounts = 0;
-    int TotalMems = 0;
+    int max_mems = 0;
+    int min_mems = 0xffffffff;
+    int max_positions_counts = 0;
+    int total_mems = 0;
+    int c_count = 0;
+    int g_count = 0;
+    int a_count = 0;
+    int t_count = 0;
+    int sequence_len = read_sequence.length();
+
+    int read_c = get_x_counts(read_sequence, 'C');
+    int read_g = get_x_counts(read_sequence, 'G');
+
+    float read_gc_content = (read_c + read_g)/float(sequence_len);
 
     json_t *json_content;
     json_error_t error;
 
     json_content = json_loads(json, 0, &error);
 
-    TotalMems = json_array_size(json_content);
+    total_mems = json_array_size(json_content);
 
     for(int i = 0; i < json_array_size(json_content); i++)
     {
@@ -123,21 +143,30 @@ string parseMemStats(const char* json){
         nested_array = json_array_get(json_content, i);
         
         sequence = json_string_value(json_array_get(nested_array, 0));
-        maxPositionsCounts = json_array_size(json_array_get(nested_array, 1));
 
-        if(sequence.length() > maxMems){
-            maxMems = sequence.length();
+        c_count += get_x_counts(sequence, 'C');
+        g_count += get_x_counts(sequence, 'G');
+        c_count += get_x_counts(sequence, 'T');
+        g_count += get_x_counts(sequence, 'A');
+        max_positions_counts = json_array_size(json_array_get(nested_array, 1));
+
+        if(sequence.length() > max_mems){
+            max_mems = sequence.length();
         }
 
-        if(sequence.length() < minMems){
-            minMems = sequence.length();
+        if(sequence.length() < min_mems){
+            min_mems = sequence.length();
         }
 
     }
 
+    float gc_content = (g_count + c_count)/float(g_count + c_count + a_count + t_count);
 
-    s << "minMems:"  << to_string(minMems) << " maxMems:"  << to_string(maxMems) << " maxPositionsCounts:" 
-      << to_string(maxPositionsCounts) << " TotalMems:" << to_string(TotalMems);
+    s << "minMems:"  << min_mems/float(sequence_len)<< " maxMems:"  << max_mems/float(sequence_len)
+     << " maxPositionsCounts:" << max_positions_counts << " TotalMems:" << total_mems
+     << " GCcontentRation: "  << read_gc_content/gc_content;
+
+     cerr << s.str() << endl;
     return s.str(); 
 
 }
@@ -203,7 +232,7 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
     }
 
     if(memstats){
-        s << parseMemStats(get_annotation<string>(aln, "mems").c_str());
+        s << parseMemStats(get_annotation<string>(aln, "mems").c_str(), aln.sequence());
     }
 
 
