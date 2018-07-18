@@ -88,22 +88,63 @@ vector<string> parseMems(const char* json){
     for(int i = 0; i < json_array_size(json_content); i++)
     {
         json_t *nested_array;
-        string message_text;
+        string sequence;
 
         nested_array = json_array_get(json_content, i);
         
-        message_text = json_string_value(json_array_get(nested_array, 0));
+        sequence = json_string_value(json_array_get(nested_array, 0));
 
-        s.push_back(message_text);
+        s.push_back(sequence);
     }
     return s;
 
 }
 
+string parseMemStats(const char* json){
+
+    stringstream s;
+    int maxMems = 0;
+    int minMems = 0xffffffff;
+    int maxPositionsCounts = 0;
+    int TotalMems = 0;
+
+    json_t *json_content;
+    json_error_t error;
+
+    json_content = json_loads(json, 0, &error);
+
+    TotalMems = json_array_size(json_content);
+
+    for(int i = 0; i < json_array_size(json_content); i++)
+    {
+        json_t *nested_array;
+        string sequence;
+
+        nested_array = json_array_get(json_content, i);
+        
+        sequence = json_string_value(json_array_get(nested_array, 0));
+        maxPositionsCounts = json_array_size(json_array_get(nested_array, 1));
+
+        if(sequence.length() > maxMems){
+            maxMems = sequence.length();
+        }
+
+        if(sequence.length() < minMems){
+            minMems = sequence.length();
+        }
+
+    }
+
+
+    s << "minMems:"  << to_string(minMems) << " maxMems:"  << to_string(maxMems) << " maxPositionsCounts:" 
+      << to_string(maxPositionsCounts) << " TotalMems:" << to_string(TotalMems);
+    return s.str(); 
+
+}
 /// Turn an Alignment into a Vowpal Wabbit format example line.
 /// If train is true, give it a label so that VW will train on it.
 /// If train is false, do not label the data.
-string alignment_to_example_string(const Alignment& aln, bool train, bool bow, bool mems) {
+string alignment_to_example_string(const Alignment& aln, bool train, bool bow, bool mems, bool memstats) {
     // We will dump it to a string stream
     stringstream s;
     
@@ -146,10 +187,10 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
             bw = add_sequence_to_bw(bw, v, 4);
         }
 
-        s << bag_of_word_to_string(bw);
+        s << bag_of_word_to_string(bw)  << " ";
     }else if(bow){
 
-        s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 4));
+        s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 4))  << " ";
     }else if(mems){
         
         map<string, int> bw;
@@ -158,7 +199,11 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
         for(auto v : mems_list){
             bw = add_sequence_to_bw(bw, v, 4);
         }
-        s << bag_of_word_to_string(bw);
+        s << bag_of_word_to_string(bw) << " ";
+    }
+
+    if(memstats){
+        s << parseMemStats(get_annotation<string>(aln, "mems").c_str());
     }
 
 
@@ -177,6 +222,7 @@ int main_recalibrate(int argc, char** argv) {
     string model_filename;
     bool bow = false;
     bool mems = false;
+    bool memstat = false;
     int c;
     optind = 2;
     while (true) {
@@ -219,6 +265,9 @@ int main_recalibrate(int argc, char** argv) {
             break;
         case 'e':
             mems = true;
+            break;
+        case 's':
+            memstat = true;
             break;
         case 'h':
         case '?':
@@ -270,7 +319,7 @@ int main_recalibrate(int argc, char** argv) {
             function<void(Alignment&)> train_on = [&](Alignment& aln) {
                 
                 // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, true, bow, mems);
+                string example_string = alignment_to_example_string(aln, true, bow, mems, memstat);
                 
                 // Load an example for each Alignment.
                 // You can apparently only have so many examples at a time because they live in a ring buffer of unspecified size.
@@ -317,7 +366,7 @@ int main_recalibrate(int argc, char** argv) {
             function<void(Alignment&)> recalibrate = [&](Alignment& aln) {
                 
                 // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, false, bow, mems);
+                string example_string = alignment_to_example_string(aln, false, bow, mems, memstat);
                 
                 // Load an example for each Alignment.
                 example* example = VW::read_example(*model, example_string);
