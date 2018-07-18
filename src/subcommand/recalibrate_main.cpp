@@ -31,7 +31,7 @@ void help_recalibrate(char** argv) {
          << "    -t, --threads N          number of threads to use" << endl
          << "    -b  --bow                bag of words as features" << endl
          << "    -e  --mems               add mems as features" << endl
-         << "    -s  --memstats            add mems stats as features" << endl;
+         << "    -s  --memstats           add mems stats as features" << endl;
 }
 
 map<string, int> sequence_to_bag_of_words(string seq, int kmer){
