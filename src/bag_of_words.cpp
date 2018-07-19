@@ -31,7 +31,7 @@ namespace vg {
 	    map<string, int> bw;// = generate_dict(kmer);
 	    map<string, int>::iterator it;
 	    int val;
-	    for(int i = 0; i < seq.length() - kmer; i++){
+	    for(int i = 0; i < seq.length() - (kmer-1); i++){
 	        string current_seq = seq.substr(i, kmer);
 	        it = bw.find(current_seq);
 	        if(it == bw.end()){
