@@ -210,23 +210,23 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
 
         vector<string> mems_list = parseMems(get_annotation<string>(aln, "mems").c_str());
 
-        map<string, int> bw = sequence_to_bag_of_words(aln.sequence(), 4);
+        map<string, int> bw = sequence_to_bag_of_words(aln.sequence(), 10);
 
         for(auto v : mems_list){
-            bw = add_sequence_to_bw(bw, v, 4);
+            bw = add_sequence_to_bw(bw, v, 10);
         }
 
         s << bag_of_word_to_string(bw)  << " ";
     }else if(bow){
 
-        s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 4))  << " ";
+        s << bag_of_word_to_string(sequence_to_bag_of_words(aln.sequence(), 10))  << " ";
     }else if(mems){
         
         map<string, int> bw;
         vector<string> mems_list = parseMems(get_annotation<string>(aln, "mems").c_str());
 
         for(auto v : mems_list){
-            bw = add_sequence_to_bw(bw, v, 4);
+            bw = add_sequence_to_bw(bw, v, 10);
         }
         s << bag_of_word_to_string(bw) << " ";
     }
