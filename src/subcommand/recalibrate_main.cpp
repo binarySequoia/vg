@@ -31,7 +31,8 @@ void help_recalibrate(char** argv) {
          << "    -t, --threads N          number of threads to use" << endl
          << "    -b  --bow                bag of words as features" << endl
          << "    -e  --mems               add mems as features" << endl
-         << "    -s  --memstats           add mems stats as features" << endl;
+         << "    -s  --memstats           add mems stats as features" << endl
+         << "    -o  --nomapq             remove mapping quality features" << endl;
 }
 
 map<string, int> sequence_to_bag_of_words(string seq, int kmer){
@@ -166,14 +167,13 @@ string parseMemStats(const char* json, string read_sequence){
      << " maxPositionsCounts:" << max_positions_counts << " TotalMems:" << total_mems
      << " GCcontentRation: "  << read_gc_content/gc_content;
 
-     cerr << s.str() << endl;
     return s.str(); 
 
 }
 /// Turn an Alignment into a Vowpal Wabbit format example line.
 /// If train is true, give it a label so that VW will train on it.
 /// If train is false, do not label the data.
-string alignment_to_example_string(const Alignment& aln, bool train, bool bow, bool mems, bool memstats) {
+string alignment_to_example_string(const Alignment& aln, bool train, bool bow, bool mems, bool memstats, bool nomapq) {
     // We will dump it to a string stream
     stringstream s;
     
@@ -185,24 +185,26 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
     // Drop all the features into the mepty-string namespace
     s << "| ";
     
-    // Original MAPQ is a feature
-    s << "origMapq:" << to_string(aln.mapping_quality()) << " ";
-    
-    // As is score
-    s << "score:" << to_string(aln.score()) << " ";
-    
-    // And the top secondary alignment score
-    double secondary_score = 0;
-    if (aln.secondary_score_size() > 0) {
-        secondary_score = aln.secondary_score(0);
+    if(!nomapq){
+        // Original MAPQ is a feature
+        s << "origMapq:" << to_string(aln.mapping_quality()) << " ";
+        
+        // As is score
+        s << "score:" << to_string(aln.score()) << " ";
+        
+        // And the top secondary alignment score
+        double secondary_score = 0;
+        if (aln.secondary_score_size() > 0) {
+            secondary_score = aln.secondary_score(0);
+        }
+        s << "secondaryScore:" << to_string(secondary_score) << " ";
+        
+        // Count the secondary alignments
+        s << "secondaryCount:" << aln.secondary_score_size() << " ";
+        
+        // Also do the identity
+        s << "identity:" << aln.identity() << " ";
     }
-    s << "secondaryScore:" << to_string(secondary_score) << " ";
-    
-    // Count the secondary alignments
-    s << "secondaryCount:" << aln.secondary_score_size() << " ";
-    
-    // Also do the identity
-    s << "identity:" << aln.identity() << " ";
     
     
     // Bag of words as features
@@ -252,6 +254,7 @@ int main_recalibrate(int argc, char** argv) {
     bool bow = false;
     bool mems = false;
     bool memstat = false;
+    bool nomapq = false;
     int c;
     optind = 2;
     while (true) {
@@ -262,13 +265,14 @@ int main_recalibrate(int argc, char** argv) {
             {"bow", no_argument, 0, 'b'},
             {"mems", no_argument, 0, 'e'},
             {"memstats", no_argument, 0, 's'},
+            {"nomapq", no_argument, 0, 'o'},
             {"model", required_argument, 0, 'm'},
             {"threads", required_argument, 0, 't'},
             {0, 0, 0, 0}
         };
 
         int option_index = 0;
-        c = getopt_long (argc, argv, "sebhTm:t:",
+        c = getopt_long (argc, argv, "osebhTm:t:",
                          long_options, &option_index);
 
         // Detect the end of the options.
@@ -297,6 +301,9 @@ int main_recalibrate(int argc, char** argv) {
             break;
         case 's':
             memstat = true;
+            break;
+        case 'o':
+            nomapq = true;
             break;
         case 'h':
         case '?':
@@ -348,7 +355,7 @@ int main_recalibrate(int argc, char** argv) {
             function<void(Alignment&)> train_on = [&](Alignment& aln) {
                 
                 // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, true, bow, mems, memstat);
+                string example_string = alignment_to_example_string(aln, true, bow, mems, memstat, nomapq);
                 
                 // Load an example for each Alignment.
                 // You can apparently only have so many examples at a time because they live in a ring buffer of unspecified size.
@@ -395,7 +402,7 @@ int main_recalibrate(int argc, char** argv) {
             function<void(Alignment&)> recalibrate = [&](Alignment& aln) {
                 
                 // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, false, bow, mems, memstat);
+                string example_string = alignment_to_example_string(aln, false, bow, mems, memstat, nomapq);
                 
                 // Load an example for each Alignment.
                 example* example = VW::read_example(*model, example_string);
