@@ -195,6 +195,7 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
     }
 
     if(memstats){
+        cerr << get_annotation<string>(aln, "mems").c_str() << endl;
         s << parseMemStats(get_annotation<string>(aln, "mems").c_str(), aln.sequence());
     }
 
