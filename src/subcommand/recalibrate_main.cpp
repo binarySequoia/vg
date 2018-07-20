@@ -122,7 +122,7 @@ string parseMemStats(const char* json, string read_sequence){
 
     }
 
-    float gc_content = 0;
+    float gc_content = 1;
 
     if(g_count + c_count + a_count + t_count != 0){
         gc_content = (g_count + c_count)/float(g_count + c_count + a_count + t_count);
