@@ -76,7 +76,7 @@ string parseMemStats(const char* json, string read_sequence){
 
     stringstream s;
     int max_mems = 0;
-    int min_mems = 0xffffffff;
+    int min_mems = std::numeric_limits<int>::max();
     int max_positions_counts = 0;
     int total_mems = 0;
     int c_count = 0;
@@ -122,7 +122,13 @@ string parseMemStats(const char* json, string read_sequence){
 
     }
 
-    float gc_content = (g_count + c_count)/float(g_count + c_count + a_count + t_count);
+    float gc_content = 0;
+
+    if(g_count + c_count + a_count + t_count != 0){
+        gc_content = (g_count + c_count)/float(g_count + c_count + a_count + t_count);
+    }
+
+
 
     s << "minMems:"  << min_mems/float(sequence_len)<< " maxMems:"  << max_mems/float(sequence_len)
      << " maxPositionsCounts:" << max_positions_counts << " TotalMems:" << total_mems
@@ -195,8 +201,7 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
     }
 
     if(memstats){
-        cerr << get_annotation<string>(aln, "mems").c_str() << endl;
-        s << parseMemStats(get_annotation<string>(aln, "mems").c_str(), aln.sequence());
+        s << parseMemStats(get_annotation<string>(aln, "mems").c_str(), aln.sequence()) << " " ;
     }
 
 
