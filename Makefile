@@ -130,6 +130,13 @@ BOOST_DIR:=deps/boost-subset
 VOWPALWABBIT_DIR:=deps/vowpal_wabbit
 MXNET_DIR:=deps/mxnet
 
+#LINUX
+MXNET_BUILD_OPT = "USE_OPENCV=0 "
+ifneq ($(shell uname -s),Darwin)
+	# MAC BUILD OPT
+	MXNET_BUILD_OPT += "USE_BLAS=apple USE_OPENMP=0"
+endif
+
 # Dependencies that go into libvg's archive
 # These go in libvg but come from dependencies
 DEP_OBJ =
@@ -359,7 +366,7 @@ $(LIB_DIR)/libvw.a: $(LIB_DIR)/libboost_program_options.a $(VOWPALWABBIT_DIR)/* 
 	+. ./source_me.sh && cd $(VOWPALWABBIT_DIR) && cp vowpalwabbit/*.h $(CWD)/$(INC_DIR)/vowpalwabbit/
 
 $(LIB_DIR)/libmxnet.a: $(MXNET_DIR)/src/*/*.cc $(MXNET_DIR)/src/*/*.h
-	+cd $(MXNET_DIR) && $(MAKE) USE_BLAS=apple USE_OPENCV=0 USE_OPENMP=0 USE_CPP_PACKAGE=1 && cp lib/* $(CWD)/$(LIB_DIR)/ && cp -r include/mxnet $(CWD)/$(INC_DIR)/mxnet && cp -r 3rdparty/dmlc-core/include/dmlc $(CWD)/$(INC_DIR)/dmlc && cp -r 3rdparty/tvm/nnvm/include/nnvm $(CWD)/$(INC_DIR)/nnvm && cp -r cpp-package/include/mxnet-cpp $(CWD)/$(INC_DIR)/mxnet-cpp
+	+cd $(MXNET_DIR) && $(MAKE) $(MXNET_BUILD_OPT) USE_CPP_PACKAGE=1 && cp lib/* $(CWD)/$(LIB_DIR)/ && cp -r include/mxnet $(CWD)/$(INC_DIR)/mxnet && cp -r 3rdparty/dmlc-core/include/dmlc $(CWD)/$(INC_DIR)/dmlc && cp -r 3rdparty/tvm/nnvm/include/nnvm $(CWD)/$(INC_DIR)/nnvm && cp -r cpp-package/include/mxnet-cpp $(CWD)/$(INC_DIR)/mxnet-cpp
 
 $(LIB_DIR)/liballreduce.a: $(LIB_DIR)/libvw.a
 
