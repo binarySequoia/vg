@@ -28,7 +28,7 @@ CXXFLAGS := -O3 -fopenmp -Werror=return-type -std=c++11 -ggdb -g -MMD -MP $(CXXF
 
 LD_INCLUDE_FLAGS:=-I$(CWD)/$(INC_DIR) -I. -I$(CWD)/$(SRC_DIR) -I$(CWD)/$(UNITTEST_SRC_DIR) -I$(CWD)/$(SUBCOMMAND_SRC_DIR) -I$(CWD)/$(CPP_DIR) -I$(CWD)/$(INC_DIR)/dynamic -I$(CWD)/$(INC_DIR)/sonLib $(shell pkg-config --cflags cairo)
 
-LD_LIB_FLAGS:= -L$(CWD)/$(LIB_DIR) -lvcflib -lgssw -lssw -lprotobuf -lsublinearLS -lhts -lpthread -ljansson -lncurses -lgcsa2 -lgbwt -ldivsufsort -ldivsufsort64 -lvcfh -lgfakluge -lraptor2 -lsdsl -lpinchesandcacti -l3edgeconnected -lsonlib -lfml -llz4 -lstructures -lvw -lboost_program_options -lallreduce
+LD_LIB_FLAGS:= -L$(CWD)/$(LIB_DIR) -lvcflib -lgssw -lssw -lprotobuf -lsublinearLS -lhts -lpthread -ljansson -lncurses -lgcsa2 -lgbwt -ldivsufsort -ldivsufsort64 -lvcfh -lgfakluge -lraptor2 -lsdsl -lpinchesandcacti -l3edgeconnected -lsonlib -lfml -llz4 -lstructures -lvw -lboost_program_options -lallreduce -lmxnet 
 # Use pkg-config to find Cairo and all the libs it uses
 LD_LIB_FLAGS += $(shell pkg-config --libs --static cairo)
 
@@ -128,6 +128,7 @@ BACKWARD_CPP_DIR:=deps/backward-cpp
 ELFUTILS_DIR:=deps/elfutils
 BOOST_DIR:=deps/boost-subset
 VOWPALWABBIT_DIR:=deps/vowpal_wabbit
+MXNET_DIR:=deps/mxnet
 
 # Dependencies that go into libvg's archive
 # These go in libvg but come from dependencies
@@ -164,6 +165,7 @@ LIB_DEPS += $(LIB_DIR)/libstructures.a
 LIB_DEPS += $(LIB_DIR)/libvw.a
 LIB_DEPS += $(LIB_DIR)/liballreduce.a
 LIB_DEPS += $(LIB_DIR)/libboost_program_options.a
+LIB_DEPS += $(LIB_DIR)/libmxnet.a
 ifneq ($(shell uname -s),Darwin)
 	# On non-Mac (i.e. Linux), where ELF binaries are used, pull in libdw which
 	# backward-cpp will use.
@@ -336,7 +338,7 @@ $(LIB_DIR)/libraptor2.a: $(RAPTOR_DIR)/src/*.c $(RAPTOR_DIR)/src/*.h
 
 $(LIB_DIR)/libstructures.a: $(STRUCTURES_DIR)/src/include/structures/*.hpp $(STRUCTURES_DIR)/src/*.cpp 
 	+. ./source_me.sh && cd $(STRUCTURES_DIR) && $(MAKE) lib/libstructures.a $(FILTER) && cp lib/libstructures.a $(CWD)/$(LIB_DIR)/ && cp -r src/include/structures $(CWD)/$(INC_DIR)/
-    
+
 # To build libvw we need to point it at our Boost, but then configure decides
 # it needs to build vwdll, which depends on codecvt, which isn't actually
 # shipped in the GCC 4.9 STL. So we hack vwdll AKA libvw_c_wrapper out of the
@@ -355,6 +357,9 @@ $(LIB_DIR)/libvw.a: $(LIB_DIR)/libboost_program_options.a $(VOWPALWABBIT_DIR)/* 
 	+. ./source_me.sh && cd $(VOWPALWABBIT_DIR) && cp vowpalwabbit/.libs/libvw.a vowpalwabbit/.libs/liballreduce.a $(CWD)/$(LIB_DIR)/
 	+. ./source_me.sh && cd $(VOWPALWABBIT_DIR) && mkdir -p $(CWD)/$(INC_DIR)/vowpalwabbit
 	+. ./source_me.sh && cd $(VOWPALWABBIT_DIR) && cp vowpalwabbit/*.h $(CWD)/$(INC_DIR)/vowpalwabbit/
+
+$(LIB_DIR)/libmxnet.a: $(MXNET_DIR)/src/*/*.cc $(MXNET_DIR)/src/*/*.h
+	+cd $(MXNET_DIR) && $(MAKE) USE_BLAS=apple USE_OPENCV=0 USE_OPENMP=0 USE_CPP_PACKAGE=1 && cp lib/* $(CWD)/$(LIB_DIR)/ && cp -r include/mxnet $(CWD)/$(INC_DIR)/mxnet && cp -r 3rdparty/dmlc-core/include/dmlc $(CWD)/$(INC_DIR)/dmlc && cp -r 3rdparty/tvm/nnvm/include/nnvm $(CWD)/$(INC_DIR)/nnvm && cp -r cpp-package/include/mxnet-cpp $(CWD)/$(INC_DIR)/mxnet-cpp
 
 $(LIB_DIR)/liballreduce.a: $(LIB_DIR)/libvw.a
 
@@ -455,7 +460,7 @@ $(SUBCOMMAND_OBJ): $(SUBCOMMAND_OBJ_DIR)/%.o : $(SUBCOMMAND_SRC_DIR)/%.cpp $(SUB
 	. ./source_me.sh && $(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INCLUDE_FLAGS) $(FILTER)
 $(UNITTEST_OBJ): $(UNITTEST_OBJ_DIR)/%.o : $(UNITTEST_SRC_DIR)/%.cpp $(UNITTEST_OBJ_DIR)/%.d $(DEPS)
 	. ./source_me.sh && $(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INCLUDE_FLAGS) $(FILTER)
-        
+
 # Protobuf stuff builds into its same directory
 $(CPP_DIR)/%.o : $(CPP_DIR)/%.cc $(DEPS)
 	. ./source_me.sh && $(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INCLUDE_FLAGS) $(FILTER)
@@ -524,6 +529,7 @@ clean: clean-rocksdb clean-protobuf clean-vcflib
 	cd $(DEP_DIR) && cd structures && $(MAKE) clean
 	cd $(DEP_DIR) && cd gperftools && $(MAKE) clean
 	cd $(DEP_DIR) && cd vowpal_wabbit && $(MAKE) clean
+	cd $(DEP_DIR) && cd mxnet && $(MAKE) clean
 	rm -Rf $(RAPTOR_DIR)/build/*
 	## TODO vg source code
 	## TODO LRU_CACHE
