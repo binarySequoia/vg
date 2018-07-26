@@ -130,11 +130,11 @@ BOOST_DIR:=deps/boost-subset
 VOWPALWABBIT_DIR:=deps/vowpal_wabbit
 MXNET_DIR:=deps/mxnet
 
-#LINUX
-MXNET_BUILD_OPT = "USE_OPENCV=0 "
-ifneq ($(shell uname -s),Darwin)
-	# MAC BUILD OPT
-	MXNET_BUILD_OPT += "USE_BLAS=apple USE_OPENMP=0"
+# MAC 
+MXNET_BUILD_OPT ="USE_OPENCV=0 USE_BLAS=apple USE_OPENMP=0"
+ifeq ($(shell uname -s),Darwin)
+	# LINUX BUILD OPT
+	MXNET_BUILD_OPT = "USE_OPENCV=0"
 endif
 
 # Dependencies that go into libvg's archive
