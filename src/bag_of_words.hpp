@@ -1,3 +1,6 @@
+#ifndef VG_BAG_OF_WORDS_HPP_INCLUDED
+#define VG_BAG_OF_WORDS_HPP_INCLUDED
+
 #include <string>
 #include <sstream>
 #include <map>
@@ -12,3 +15,5 @@ namespace vg {
 
 	map<string, int> sequence_to_bag_of_words(string seq, int kmer);
 }
+
+#endif
