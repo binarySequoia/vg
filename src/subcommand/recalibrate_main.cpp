@@ -14,6 +14,7 @@
 #include "../vg.hpp"
 #include "../annotation.hpp"
 #include "../bag_of_words.hpp"
+#include "../model.hpp"
 
 #include <vowpalwabbit/vw.h>
 #include <jansson.h>
