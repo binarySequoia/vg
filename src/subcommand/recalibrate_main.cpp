@@ -18,6 +18,7 @@
 
 #include <vowpalwabbit/vw.h>
 #include <jansson.h>
+#include <mxnet-cpp/MxNetCpp.h>
 
 using namespace std;
 using namespace vg;
@@ -209,6 +210,82 @@ string alignment_to_example_string(const Alignment& aln, bool train, bool bow, b
     return s.str();
 }
 
+int append_data(const Alignment& aln, vector<mx_float> &X, vector<mx_float> &y, bool train, bool bow, bool mems, bool memstats, bool nomapq){
+    int feature_size = 0;
+    int kmer = 10;
+
+    if (train) {
+        // First is the class; 1 for correct or -1 for wrong
+        mx_float correct_class = 0.0;
+        //mx_float incorrect_class = 0.0;
+        if(aln.correctly_mapped()){
+            correct_class = 1.0;
+        }else{
+            //incorrect_class = 1.0;
+            correct_class = 0.0;
+        };
+
+        y.push_back(correct_class);
+        //y.push_back(incorrect_class);
+    }
+    
+    
+
+    if(!nomapq){
+        // Original MAPQ is a feature
+        X.push_back(static_cast<float>(aln.mapping_quality()));
+        feature_size++;
+        // As is score
+        X.push_back(static_cast<float>(aln.score()));
+        feature_size++;
+        // And the top secondary alignment score
+        double secondary_score = 0;
+        if (aln.secondary_score_size() > 0) {
+            secondary_score = aln.secondary_score(0);
+        }
+        X.push_back(static_cast<float>(secondary_score));
+        feature_size++;
+        // Count the secondary alignments
+        X.push_back(static_cast<float>(aln.secondary_score_size()));
+        feature_size++;
+        // Also do the identity
+        X.push_back(static_cast<float>(aln.identity()));
+        feature_size++;
+    }
+
+     // Bag of words as features
+    if(mems && bow){
+        
+        vector<string> mems_list = parseMems(get_annotation<string>(aln, "mems").c_str());
+
+        map<string, int> bw = sequence_to_bag_of_words(aln.sequence(), kmer);
+
+        for(auto v : mems_list){
+            bw = add_sequence_to_bw(bw, v, kmer);
+        }
+
+        bag_of_word_to_float_vec(bw, X);
+        feature_size += pow(4, kmer);
+    }else if(bow){
+
+        bag_of_word_to_float_vec(sequence_to_bag_of_words(aln.sequence(), kmer), X);
+        feature_size += pow(4, kmer);
+    }else if(mems){
+        
+        map<string, int> bw = generate_dict(kmer);
+        vector<string> mems_list = parseMems(get_annotation<string>(aln, "mems").c_str());
+
+        for(auto v : mems_list){
+            bw = add_sequence_to_bw(bw, v, kmer);
+        }
+
+        bag_of_word_to_float_vec(bw, X);
+        feature_size += pow(4, kmer);
+    }
+
+    return feature_size;
+}
+
 int main_recalibrate(int argc, char** argv) {
 
     if (argc == 2) {
@@ -224,6 +301,7 @@ int main_recalibrate(int argc, char** argv) {
     bool memstat = false;
     bool nomapq = false;
     int c;
+    bool nn_predictor = false;
     optind = 2;
     while (true) {
         static struct option long_options[] =
@@ -236,11 +314,12 @@ int main_recalibrate(int argc, char** argv) {
             {"nomapq", no_argument, 0, 'o'},
             {"model", required_argument, 0, 'm'},
             {"threads", required_argument, 0, 't'},
+            {"neuralnet", no_argument, 0, 'k'}, 
             {0, 0, 0, 0}
         };
 
         int option_index = 0;
-        c = getopt_long (argc, argv, "osebhTm:t:",
+        c = getopt_long (argc, argv, "kosebhTm:t:",
                          long_options, &option_index);
 
         // Detect the end of the options.
@@ -273,6 +352,9 @@ int main_recalibrate(int argc, char** argv) {
         case 'o':
             nomapq = true;
             break;
+        case 'k':
+            nn_predictor = true;
+            break;
         case 'h':
         case '?':
             help_recalibrate(argv);
@@ -284,9 +366,28 @@ int main_recalibrate(int argc, char** argv) {
         }
     }
 
+    // With the GAM input
+
     get_input_file(optind, argc, argv, [&](istream& gam_stream) {
-        // With the GAM input
-       
+        
+        
+        // Neural Net layer architecture
+        vector<int> layers{8, 8, 8, 4 ,1};
+        int output_size = 1;
+        Context ctx = Context::cpu();
+        NeuralNet nn(layers);
+        vector<mx_float> X;
+        vector<mx_float> y;
+        vector<mx_float> X_t;
+        vector<mx_float> y_t; 
+        int counter = 0;
+        int batch_size = 256;
+        int epochs = 100;
+        int correct = 0;
+        int input_size = 0;
+        //NDArray y_pred;
+        
+        
         if (train) {
             // We want to train a model.
             
@@ -318,70 +419,144 @@ int main_recalibrate(int argc, char** argv) {
             
             // TODO: what do any of the other parameters do?
             // TODO: Note that vw defines a VW namespace but dumps its vw type into the global namespace.
-            vw* model = VW::initialize(vw_args);
+            LogisticReg log_reg(vw_args);
+
+            
             
             function<void(Alignment&)> train_on = [&](Alignment& aln) {
                 
                 // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, true, bow, mems, memstat, nomapq);
                 
+                if(nn_predictor){
+                    input_size = append_data(aln, X, y, train, bow, mems, memstat, nomapq);
+                    counter++;
+
+
+                    if(counter == batch_size){
+                        NDArray X_batch = NDArray(Shape(counter, input_size ), ctx, false);
+                        X_batch.SyncCopyFromCPU(X.data(), counter * input_size );
+                        cerr <<"writing X" << endl;
+                        NDArray y_batch = NDArray(Shape(counter, output_size), ctx, false);;
+                        y_batch.SyncCopyFromCPU(y.data(), counter * output_size);
+                        cerr <<"writing Y" << endl;
+                        X.clear();
+                        y.clear();
+                        nn.set_epoch(epochs);
+                        nn.fit(X_batch, y_batch, "adam", input_size, output_size, batch_size, ctx);
+                        counter = 0;
+                    }
+                }else{
+                    string example_string = alignment_to_example_string(aln, true, bow, mems, memstat, nomapq);
+                    log_reg.learn_example(example_string);
+                }
                 // Load an example for each Alignment.
                 // You can apparently only have so many examples at a time because they live in a ring buffer of unspecified size.
                 // TODO: There are non-string-parsing-based ways to do this too.
                 // TODO: Why link against vw at all if we're just going to shuffle strings around? We could pipe to it.
                 // TODO: vw alo dumps "example" into the global namespace...
-                example* example = VW::read_example(*model, example_string);
-                
+                //example* example = VW::read_example(*model, example_string);
+
                 // Now we call the learn method, defined in vowpalwabbit/global_data.h.
                 // It's not clear what it does but it is probably training.
                 // If we didn't label the data, this would just predict instead.
-                model->learn(example);
+                //model->learn(example);
                 
                 // Clean up the example
-                VW::finish_example(*model, example);
+                //VW::finish_example(*model, example);
+                
             };
             
             // TODO: We have to go in serial because vw isn't thread safe I think.
             stream::for_each(gam_stream, train_on);
+
+            if(counter != 0 && nn_predictor){
+                NDArray X_batch = NDArray(Shape(counter, input_size), ctx, false);
+                X_batch.SyncCopyFromCPU(X.data(), counter * input_size);
+                //cerr <<"writing X" << endl;
+                NDArray y_batch = NDArray(Shape(counter, output_size), ctx, false);;
+                y_batch.SyncCopyFromCPU(y.data(), counter * output_size);
+                //cerr <<"writing Y" << endl;
+                X.clear();
+                y.clear();
+                nn.set_epoch(epochs);
+                nn.fit(X_batch, y_batch, "adam", 5, 2, counter, ctx);
+                counter = 0;
+            }
+            
+            if(nn_predictor){
+                cerr << "SAVING MODEL...." << endl;
+                nn.save_model(model_filename);
+            }
+            
             
             // Now we want to output the model.
             // TODO: We had to specify that already. I think it is magic?
             
             // Clean up the VW model
-            VW::finish(*model);
+            //VW::finish(*model);
             
         } else {
-            // We are in run mode
-            
+
             string vw_args = "--no_stdin";
-            
-            if (!model_filename.empty()) {
-                // Load from the given model
-                vw_args += " -i " + model_filename;
+            vw* model;
+            // We are in run mode
+            if(nn_predictor){
+                nn.load_model(model_filename);
+                //cerr << "Model Loaded" << endl;
+            }else{
+                if (!model_filename.empty()) {
+                    // Load from the given model
+                    vw_args += " -i " + model_filename;
+
+                } 
+
+                model = VW::initialize(vw_args);
             }
+
+            //LogisticReg log_reg(vw_args);
             
             // Make the model
-            vw* model = VW::initialize(vw_args);
-       
+            
+            
             // Define a buffer for alignments to print
             vector<Alignment> buf;
             
             // Specify how to recalibrate an alignment
             function<void(Alignment&)> recalibrate = [&](Alignment& aln) {
                 
-                // Turn each Alignment into a VW-format string
-                string example_string = alignment_to_example_string(aln, false, bow, mems, memstat, nomapq);
+                double prob;
+
+                if(nn_predictor){
+                    counter++;
+                    input_size = append_data(aln, X_t, y_t, true, bow, mems, memstat, nomapq);
+                    NDArray X_batch(Shape(1, input_size), ctx, false);
+                    X_batch.SyncCopyFromCPU(X_t.data(), 1 * 5);
+                    NDArray y_pred(Shape(1, output_size), ctx, false);
+                    
+                    y_pred = nn.predict(X_batch, ctx);
+                    prob = min(max(static_cast<double>(y_pred.At(0, 0)), 0.0), 1.0);
+                    //cerr << "before if else" << endl;
+                    //cerr << "after if else" << endl;
+                    X_t.clear();
+                    y_t.clear();
+                }else{
+                    // Turn each Alignment into a VW-format string
+                    string example_string = alignment_to_example_string(aln, false, bow, mems, memstat, nomapq);
+
+                    //prob = log_reg.predict(example_string);
+                }
                 
                 // Load an example for each Alignment.
-                example* example = VW::read_example(*model, example_string);
+                //example* example = VW::read_example(*model, example_string);
                 
                 // Now we call the learn method, defined in vowpalwabbit/global_data.h.
                 // It's not clear what it does but it is probably training.
                 // If we didn't label the data, this would just predict instead.
-                model->learn(example);
+                //model->learn(example);
                 
                 // Get the correctness prediction from -1 to 1
-                double prob = example->pred.prob;
+                //double prob = example->pred.prob;
+                
                 // Convert into a real MAPQ estimate.
                 double guess = prob_to_phred(1.0 - prob);
                 // Clamp to 0 to 60
@@ -395,7 +570,8 @@ int main_recalibrate(int argc, char** argv) {
                 aln.set_mapping_quality(clamped);
                 
                 // Clean up the example
-                VW::finish_example(*model, example);
+                //VW::finish_example(*model, example);
+                
                 
                 
                 
@@ -409,13 +585,21 @@ int main_recalibrate(int argc, char** argv) {
                         buf.clear();
                     }
                 }
+                
+                
             };
+
+            // if(counter == 0){
+            //     counter = 1.0;
+            // }
+
+            //cerr << "ACCURACY : " << double(correct)/counter << endl;
             
             // For each read, recalibrate and buffer and maybe print it.
             // TODO: It would be nice if this could be parallel...
             stream::for_each(gam_stream, recalibrate);
             
-            VW::finish(*model);
+            //VW::finish(*model);
             
             // Flush the buffer
             write_alignments(std::cout, buf);

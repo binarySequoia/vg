@@ -1,10 +1,28 @@
 #include "model.hpp"
 
 
-void LogisticReg::fit()
+LogisticReg::LogisticReg(string vw_args)
 {
-	cout << "Fitting VopalWabbit" << endl;
+	model = VW::initialize(vw_args);
 	return;
+}
+
+LogisticReg::~LogisticReg(){
+	VW::finish(*model);
+}
+
+void LogisticReg::learn_example(string example_string){
+	example* example = VW::read_example(*model, example_string);
+	model->learn(example);
+	VW::finish_example(*model, example);
+}
+
+double LogisticReg::predict(string example_string){
+	example* example = VW::read_example(*model, example_string);
+	model->learn(example);
+	double prob = example->pred.prob;
+	VW::finish_example(*model, example);
+	return prob;
 }
 
 NeuralNet::NeuralNet(const vector<int> &layer_list){
@@ -77,13 +95,15 @@ void NeuralNet::fit(NDArray X_train, NDArray y_train,
 
 
   	size_t data_size = y_train.GetShape().at(0);
-  	LogLoss train_logloss;
+  	MAE train_logloss;
   	//Accuracy acu_train;
   	NDArray X_batch, y_batch;
 
-  	args_map = set_input_shape(X_train, y_train, batch_size, ctx);
+  	if(!data_infered){
+  		args_map = set_input_shape(X_train, y_train, batch_size, ctx);
+  	}
 
-  	model.InferArgsMap(ctx, &args_map, args_map);
+  	//model.InferArgsMap(ctx, &args_map, args_map);
   	// Let MXNet infer shapes other parameters such as weights
   	
   	if(!model_loaded){
@@ -138,9 +158,9 @@ void NeuralNet::fit(NDArray X_train, NDArray y_train,
 				//cout << exec->grad_arrays[j] << endl;
 			}
 
-			cout << " train_y_batch: "<< y_batch << endl;
+			//cout << " train_y_batch: "<< y_batch << endl;
 
-			cout << " train_output_batch: "<< exec->outputs[0] << endl;
+			//cout << " train_output_batch: "<< exec->outputs[0] << endl;
 
 			NDArray::WaitAll();
 		}
@@ -162,9 +182,9 @@ void NeuralNet::fit(NDArray X_train, NDArray y_train,
 			exec->Forward(false);
 			NDArray::WaitAll();
 
-			cout << " y_batch: "<< y_batch << endl;
+			//cout << " y_batch: "<< y_batch << endl;
 
-			cout << " output_batch: "<< exec->outputs[0] << endl;
+			//cout << " output_batch: "<< exec->outputs[0] << endl;
 
 			train_logloss.Update(y_batch, exec->outputs[0]);
 		}
@@ -176,13 +196,13 @@ void NeuralNet::fit(NDArray X_train, NDArray y_train,
 	}
 
 	delete exec;
-	MXNotifyShutdown();
+	//MXNotifyShutdown();
 	return;
 }
 
 NDArray NeuralNet::predict(NDArray X_test, Context ctx){
 	int data_size = X_test.GetShape().at(0);
-  	NDArray output(Shape(data_size, 2), ctx);
+  	NDArray output(Shape(data_size, 1), ctx);
 
 
   	//if(!data_infered){
@@ -217,9 +237,10 @@ void NeuralNet::save_model(string filename){
 
 void NeuralNet::load_model(const string& filename){
 	ifstream f(filename.c_str());
-    if(f.good()){
+    if(f.good()){ 
     	LG << " Loading model from ..." << filename;
-    	NDArray::Load(filename, nullptr, &args_map);
+    	args_map = NDArray::LoadToMap(filename);
+    	LG << " Model Loaded";
     	model_loaded = true;
     }else{
     	LG << filename << " not found. unable to load model.";

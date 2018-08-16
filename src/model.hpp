@@ -2,7 +2,8 @@
 #define VG_MODEL_HPP
 #include <iostream>
 #include <chrono>
-#include "mxnet-cpp/MxNetCpp.h"
+#include <mxnet-cpp/MxNetCpp.h>
+#include <vowpalwabbit/vw.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string>
@@ -11,14 +12,32 @@
 using namespace std;
 using namespace mxnet::cpp;
 
+// class Model{
+// 	private:
+
+// 	protected:
+
+// 	public:
+// 		virtual Model();
+// 		virtual ~Model();
+// 		virtual load_model();
+// 		virtual save_model();
+// 		virtual predict();
+// 		virtual predict_proba();
+// }
 
 class LogisticReg
 {
 	private:
 		string load_data_from_alingment();
+		vw* model;
 	public:
+		LogisticReg(string args);
+		~LogisticReg();
+		void learn_example(string example_string);
+		void initialize(string args);
 		void fit();
-		void predict();
+		double predict(string example_string);
 		void predict_proba();
 
 };
@@ -32,7 +51,7 @@ class NeuralNet
 		} net_params;
 		struct {
 			int input_size = 10;
-			int batch_size = 100;
+			int batch_size = 256;
 			int max_epoch = 100;
 			double clip_gradient = 10;
 			double learning_rate = 0.000001;
